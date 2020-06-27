@@ -206,9 +206,20 @@ fc$upper<-fc$upper
 fc$lower<-fc$lower
 fc$x<-fc$x
 
-fc
+#fc
 
 write.csv(fc,"s02v03.csv")
+
+fc_V02 <- forecast(arima_fit_v02, h=140)
+fc_V02$mean<-fc_V02$mean
+fc_V02$upper<-fc_V02$upper
+fc_V02$lower<-fc_V02$lower
+fc_V02$x<-fc_V02$x
+
+#fc_V02
+
+write.csv(fc_V02,"s02v02.csv")
+
 
 ```
 
