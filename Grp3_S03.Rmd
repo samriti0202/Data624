@@ -1,0 +1,234 @@
+---
+title: "Grp3_S03"
+author: "Samriti Malhotra"
+date: "June 25, 2020"
+output:
+  word_document:
+    toc: yes
+    toc_depth: 4
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '4'
+subtitle: Project 1
+---
+
+## Series 3
+
+### Import the necessary libraries
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(fpp2)
+library(dplyr)
+library(imputeTS)
+library(urca)
+
+library(MLmetrics)
+
+```
+
+### Load the dataset
+```{r }
+data_project <- readxl::read_excel("./project1data/Data Set for class.xls")
+head(data_project)
+```
+
+### Series 3 Subset the dataset
+```{r}
+S03 <- subset(data_project, group == 'S03', select = c(SeriesInd, Var05, Var07))
+head(S03)
+```
+
+### Visualization of variables
+```{r}
+predictobs <- 1623:1762
+S3 <- ts(S03[-predictobs, 2:3])
+
+autoplot(S3) + ylab('Value') + xlab('Time') + ggtitle('Var05 vs Var07')
+
+
+```
+Both the series in S03 look alike, Most probably the forecasts
+for both series will be almost identical.The data show strong trend but no evident seasonal pattern, which will be bases of our modelling.
+
+### Data Cleaning and Exploration
+
+#### Get subsets of Var05 and Var07
+
+```{r}
+var05 <- S03 %>% filter(SeriesInd <= 43021) %>% select(Var05)
+var07 <- S03 %>% filter(SeriesInd <= 43021) %>% select(Var07)
+
+```
+
+####Explore Var05
+```{r}
+summary(var05)
+```
+
+Var05 has 4 missing value
+
+#### Explore Var07
+```{r}
+summary(var07)
+```
+
+Var07 has 4 missing values
+
+
+
+#### Impute Missing values. 
+```{r}
+var05 <- na_interpolation(var05)
+summary(var05)
+
+```
+
+```{r}
+var07 <- na_interpolation(var07)
+summary(var07)
+```
+
+```{r}
+var05 <- ts(var05)
+str(var05)
+```
+
+
+```{r}
+var07 <- ts(var07)
+str(var07)
+```
+
+#### Outliers
+The series show only one outlier between them which is shown in the above timesries plot.
+As, series are so similar and this is one of the defining differences of the series, We are not removing outliers.
+
+```{r }
+s31out <- tsoutliers(var05)
+s32out <- tsoutliers(var07)
+
+data.frame(S3) %>% ggplot() +
+  geom_line(aes(x = 1:length(var05), y = Var05), color = 'green4') +
+  geom_point(data = data.frame(s31out), aes(x = index, y = replacements),
+             color = 'blue', size = 2) +
+  geom_point(aes(x = s31out$index, y = Var05[s31out$index]),
+             color = 'red', size = 2) +
+  xlab('Time') + ylab('Values') +
+  ggtitle('Var05 With Outlier and Replacement Shown')
+```
+#### ACF for VAr5
+```{r}
+par(mfrow=c(1,2))
+autoplot(diff(var05))
+ggAcf(diff(var05))
+```
+
+### ACF for VAr7
+```{r}
+par(mfrow=c(1,2))
+autoplot(var07)
+autoplot(diff(var07))
+ggAcf(diff(var07))
+```
+
+
+### Random Walk with Drift
+Since the data has a clear trend component but no seasonality component, applying
+simple random walk with drift for baseline model.
+
+```{r}
+s03v5 <- var05
+s03v7 <- var07
+
+rwf(s03v5, h = 140, drift = T) %>% autoplot() + ylab('Var05')
+rwf(s03v7, h = 140, drift = T) %>% autoplot() + ylab('Var07')
+```
+
+
+### Exponential Smoothing model
+
+Applying linear trend model for the data.
+
+```{r, echo = F}
+fit <- ets(s03v5, model = 'AAN', damped = F)
+fit %>% forecast(h = 140) %>% autoplot() + ylab('Var05')
+
+fit2 <- ets(s03v7, model = 'AAN', damped = F)
+fit2 %>% forecast(h = 140) %>% autoplot() + ylab('Var07')
+```
+
+
+
+### ARIMA Model
+
+Applying ARIMA model: ARIMA(1,1,0) choice of model parameters is confirmed by data visualization and by the auto arima function.
+
+
+```{r, echo = F}
+# data indicates an AR 1 model from ACF and PACF
+arima_s3v5 <- Arima(s03v5, order = c(1,1,0), include.drift = T)
+arima_s3v5 %>% forecast(h = 140) %>% autoplot() + ylab('Var05')
+summary(arima_s3v5)
+
+arima_s3v7 <- Arima(s03v7, order = c(1,1,0), include.drift = T)
+arima_s3v7 %>% forecast(h = 140) %>% autoplot() + ylab('Var07')
+summary(arima_s3v7)
+
+```
+
+
+
+### Forecast
+```{r}
+autoplot(arima_s3v5)
+```
+```{r}
+autoplot(arima_s3v7)
+```
+### Check the residuals
+```{r}
+checkresiduals(arima_s3v5)
+checkresiduals(fit)
+```
+
+
+```{r}
+checkresiduals(arima_s3v7)
+checkresiduals(fit2)
+
+```
+
+
+Both sets of residuals appear to resemble a normal distribution with some strong
+outliers. Exponential smoothing model does not pass  the Ljung-Box test with a p-value of 0.03795,
+which indicates that residuals from the exponential smoothing model may
+be correlated and model can be improved. ARIMA model  further
+confirms our decision to use the ARIMA model for this series.
+
+### MAPE Calculation:
+
+```{r}
+print(paste0("MAPE for S03 Var05 is ", MLmetrics::MAPE(arima_s3v5$fitted,s03v5)))
+
+print(paste0("MAPE for S03 Var07 is ", MLmetrics::MAPE(arima_s3v7$fitted,s03v7)))
+
+
+```
+
+### Writing forcast of V07 to csv
+```{r}
+fc <- forecast(s03v7,h=140)
+fc$mean<-fc$mean
+fc$upper<-fc$upper
+fc$lower<-fc$lower
+fc$x<-fc$x
+
+fc
+
+write.csv(fc,"s03v07.csv")
+
+```
+

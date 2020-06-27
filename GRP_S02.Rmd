@@ -1,0 +1,214 @@
+---
+title: "DATA 624 PROJECT 1"
+author: "Samriti Malhotra"
+date: "June 25, 2020"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '4'
+  word_document:
+    toc: yes
+    toc_depth: 4
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+subtitle: Project 1
+---
+
+## Series S02
+
+### Import the necessary libraries
+
+```{r }
+knitr::opts_chunk$set(echo = TRUE)
+
+library(fpp2)
+library(dplyr)
+library(imputeTS)
+library(urca)
+
+library(MLmetrics)
+
+```
+
+### Load the dataset
+```{r }
+data_project <- readxl::read_excel("./project1data/Data Set for class.xls")
+head(data_project)
+```
+
+### Series 02 Subset 
+```{r}
+S02 <- subset(data_project, group == 'S02', select = c(SeriesInd, Var02, Var03))
+head(S02)
+```
+
+
+### Exploratory Analysis of variables in Series S02
+```{r }
+predictobs <- 1623:1762
+S2 <- ts(S02[-predictobs, 2:3])
+
+S2v1 <- ts(S02[-predictobs,2])
+S2v2 <- ts(S02[-predictobs,3])
+
+
+summary(S2v1)
+
+summary(S2v2)
+
+```
+
+Var02 has no missing values and Var03 has 4 missing values. 
+
+### Exploratory Analysis of Var02 in series 2
+```{r }
+
+autoplot(S2v1)
+
+hist(scale(S2v1),br=100,xlim=c(0,100) )
+
+boxplot(S2v1)
+
+```
+Looking at above plots fixed distribution assumption do not hold true, as histogram is not be bell-shaped, and the normal probability plot is not linear. it is right skewed. Box plot show many outliers. May be after suppressing outlier's distribution plot will improve and series smoothens.
+
+### Exploratory Analysis of Var03 in series 2
+```{r fig.width=8L, fig.height=6L}
+
+# interpreting NA values in our variable,
+S2v2 <- na_interpolation(S2v2)  
+
+
+autoplot(S2v2)
+
+
+hist(scale(S2v2),br=100,xlim=c(0,100) )
+
+boxplot(S2v2)
+
+
+
+```
+
+Looking at above plots fixed distribution assumption holds good for V03, as histogram is bell-shaped, and the normal probability plot is linear. It has one outliers.                
+
+
+
+### Suppressing Outlier for var02
+```{r}
+S02v2C <- tsclean(S2v1)
+
+S02v3C <- S2v2
+
+
+```
+
+
+
+### ACF of Var02 and Var03
+```{r}
+
+ggAcf(S02v2C)
+
+ggAcf(S02v3C)
+
+
+```
+ACF plots for var02 & var03 shows  Trend with insignificant seasonality. 
+
+## Applying Models 
+
+
+### ETS model to Var02
+```{r}
+fit_ets <- ets(S02v2C)
+autoplot(fit_ets)
+checkresiduals(fit_ets)
+fit_ets %>% forecast(h=140) %>%
+  autoplot() +
+  ylab("Forecast for Var02")
+
+```
+
+### ETS model to Var03
+```{r}
+#Var 03
+fit_ets_V03 <- ets(S02v3C)
+autoplot(fit_ets_V03)
+checkresiduals(fit_ets_V03)
+fit_ets_V03 %>% forecast(h=140) %>%
+  autoplot() +
+  ylab("Forecast for Var03")
+
+```
+
+
+### Applying ARIMA Model to Var02.
+```{r}
+
+
+arima_fit_v02 <- auto.arima(S02v2C)
+
+summary(arima_fit_v02)
+
+autoplot(forecast(arima_fit_v02, h=140))
+
+checkresiduals(arima_fit_v02)
+```
+The auto.arima results with ARIMA(1,0,1) model with no drift , 
+
+
+### Arima model for Var 03
+```{r}
+
+arima_fit_v03 <- auto.arima(S02v3C)
+
+summary(arima_fit_v03)
+
+autoplot(forecast(arima_fit_v03, h=140))
+
+checkresiduals(arima_fit_v03)
+
+
+
+```
+
+A portmanteau test returns a large p-value 0.9938, also suggesting that the residuals are white noise.
+The ACF plot of the residuals from the ARIMA(0,1,1) model shows that all autocorrelations are within the threshold limits, indicating that the residuals are behaving like white noise
+
+### MAPE Calculation:
+
+```{r}
+print(paste0("Accuracy for Var 02"))
+print(paste0("MAPE for S02 Var02 using ETS model           :::   ",  MLmetrics::MAPE(fit_ets$fitted,S02v2C)))
+print(paste0("MAPE for S02 Var02 using Auto ARIMA model    :::   ",  MLmetrics::MAPE(arima_fit_v02$fitted,S02v2C)))
+
+print(paste0("Accuracy for Var 03"))
+print(paste0("MAPE for S02 Var03 using ETS model           :::   ", MLmetrics::MAPE(fit_ets_V03$fitted,S02v3C)))
+print(paste0("MAPE for S02 Var03 using Auto ARIMA model    :::   ", MLmetrics::MAPE(arima_fit_v03$fitted,S02v3C)))
+
+
+
+
+```
+Looking at MAPE we are using ARIMA for forcast of Var03.
+
+Also looking at the residuals for both models variables is having constant variance and normal distrubution and also residuals are uncorrelated with nearly zero mean.The mean of the residuals is close to zero and there is no significant correlation in the residuals series. 
+
+### Writing forcast of V03 to csv
+```{r}
+
+fc <- forecast(arima_fit_v03, h=140)
+fc$mean<-fc$mean
+fc$upper<-fc$upper
+fc$lower<-fc$lower
+fc$x<-fc$x
+
+fc
+
+write.csv(fc,"s02v03.csv")
+
+```
+
